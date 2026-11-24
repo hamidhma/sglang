@@ -346,6 +346,7 @@ from sglang.srt.managers.utils import (
     is_health_check_generate_req,
     is_war_barrier_enabled,
     make_abort_req,
+    validate_capture_start_lens,
     validate_input_length,
 )
 from sglang.srt.mem_cache import kv_cache_builder
@@ -3426,6 +3427,7 @@ class Scheduler(
                 return_routed_experts=recv_req.return_routed_experts,
                 routed_experts_start_len=recv_req.routed_experts_start_len,
                 return_indexer_topk=recv_req.return_indexer_topk,
+                indexer_topk_start_len=recv_req.indexer_topk_start_len,
                 eos_token_ids=self.model_config.hf_eos_token_id,
                 bootstrap_host=recv_req.bootstrap_host,
                 bootstrap_port=recv_req.bootstrap_port,
@@ -3759,25 +3761,13 @@ class Scheduler(
             self._add_request_to_queue(req)
             return
 
-        if recv_req.return_routed_experts:
-            error_msg = None
-            if recv_req.routed_experts_start_len < 0:
-                error_msg = (
-                    f"{recv_req.routed_experts_start_len=} is lower than 0. "
-                    "Please use a non-negative routed_experts_start_len."
-                )
-
-            if recv_req.routed_experts_start_len > len(req.origin_input_ids):
-                error_msg = (
-                    f"{recv_req.routed_experts_start_len=} is higher than the "
-                    f"number of input tokens {len(req.origin_input_ids)=}. Please "
-                    f"use a smaller routed_experts_start_len."
-                )
-
-            if error_msg is not None:
-                req.set_finish_with_abort(error_msg)
-                self._add_request_to_queue(req)
-                return
+        error_msg = validate_capture_start_lens(
+            recv_req=recv_req, num_input_tokens=len(req.origin_input_ids)
+        )
+        if error_msg is not None:
+            req.set_finish_with_abort(error_msg)
+            self._add_request_to_queue(req)
+            return
 
         self._bind_pp_arrival_prefetch(req, recv_req)
 

@@ -57,12 +57,17 @@ from sglang.srt.parser.response_template import tool_close_token_ids
 from sglang.srt.plugins import load_plugins
 from sglang.srt.runtime_context import (
     get_device,
+    get_exec,
     get_model,
     get_observability,
     get_serving,
     publish,
 )
 from sglang.srt.server_args import PortArgs, ServerArgs
+from sglang.srt.state_capturer.indexer_diff import (
+    encode_indexer_topk_for_response,
+    warm_up_indexer_topk_encoding,
+)
 from sglang.srt.utils import (
     configure_gc_logging,
     configure_logger,
@@ -93,6 +98,8 @@ class DetokenizerManager(MultiHttpWorkerDetokenizerMixin):
 
         # Init running status
         self.init_running_status(server_args)
+
+        self.init_indexer_topk_encoding()
 
         # Init dispatcher
         self.init_request_dispatcher()
@@ -149,6 +156,11 @@ class DetokenizerManager(MultiHttpWorkerDetokenizerMixin):
 
         if get_observability().enable_metrics:
             start_cpu_monitor_thread("detokenizer")
+
+    def init_indexer_topk_encoding(self):
+        """Pick the response encoding of indexer top-k picks and compile its kernels."""
+        self.indexer_topk_encoding = get_exec().features.indexer_topk_encoding
+        warm_up_indexer_topk_encoding(self.indexer_topk_encoding)
 
     def init_request_dispatcher(self):
         self._request_dispatcher = TypeBasedDispatcher(
@@ -387,6 +399,22 @@ class DetokenizerManager(MultiHttpWorkerDetokenizerMixin):
             for item in data_list
         ]
 
+    def _encode_indexer_topk_per_request(
+        self, recv_obj: BatchTokenIDOutput
+    ) -> Optional[List[Optional[str]]]:
+        if recv_obj.indexer_topk is None:
+            return None
+        return [
+            (
+                encode_indexer_topk_for_response(
+                    rows=rows.numpy(), encoding=self.indexer_topk_encoding, rid=rid
+                )
+                if rows is not None
+                else None
+            )
+            for rid, rows in zip(recv_obj.rids, recv_obj.indexer_topk)
+        ]
+
     @staticmethod
     def _route_rows(
         recv_obj: BatchTokenIDOutput, headers: List[Optional[DetokenizeHeader]]
@@ -424,7 +452,7 @@ class DetokenizerManager(MultiHttpWorkerDetokenizerMixin):
             else []
         )
         routed_experts = self._b64_encode_per_request(recv_obj.routed_experts)
-        indexer_topk = self._b64_encode_per_request(recv_obj.indexer_topk)
+        indexer_topk = self._encode_indexer_topk_per_request(recv_obj)
         return BatchStrOutput(
             rids=recv_obj.rids,
             http_worker_ipcs=self._route_rows(recv_obj, headers),

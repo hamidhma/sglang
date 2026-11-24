@@ -192,6 +192,9 @@ DISAGG_TRANSFER_BACKEND_CHOICES = [
 
 GRAMMAR_BACKEND_CHOICES = ["xgrammar", "outlines", "llguidance", "none"]
 
+# Each name has a response format in state_capturer/indexer_diff.py.
+INDEXER_TOPK_ENCODING_CHOICES = ["raw", "diff", "diff+zlib"]
+
 BUILT_IN_SAMPLING_BACKENDS = frozenset({"flashinfer", "pytorch", "ascend", "intel_xpu"})
 SAMPLING_BACKEND_CHOICES = set(BUILT_IN_SAMPLING_BACKENDS)
 

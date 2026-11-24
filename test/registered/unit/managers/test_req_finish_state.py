@@ -85,6 +85,8 @@ class TestReqFinishMethods(CustomTestCase):
             return_logprob=True,
             return_routed_experts=True,
             routed_experts_start_len=-1,
+            return_indexer_topk=True,
+            indexer_topk_start_len=-1,
         )
         req.logprob_start_len = 2
         with patch("sglang.srt.managers.schedule_batch.get_parallel") as parallel:
@@ -93,6 +95,7 @@ class TestReqFinishMethods(CustomTestCase):
         self.assertEqual(list(req.origin_input_ids), [0])
         self.assertEqual(req.logprob_start_len, -1)
         self.assertEqual(req.routed_experts_start_len, 0)
+        self.assertEqual(req.indexer_topk_start_len, 0)
 
 
 if __name__ == "__main__":

@@ -326,6 +326,9 @@ class GenerateReqInput:
     # 0 = full sequence.
     routed_experts_start_len: int = 0
     return_indexer_topk: bool = False
+    # Absolute start position for returned indexer top-k rows; response covers
+    # `[indexer_topk_start_len, seqlen - 1)`. Must be in [0, prompt_tokens].
+    indexer_topk_start_len: int = 0
 
     # The modalities of the image data [image, multi-images, video]
     modalities: Optional[List[str]] = None
@@ -1141,6 +1144,7 @@ class GenerateReqInput:
             return_routed_experts=self.return_routed_experts,
             routed_experts_start_len=self.routed_experts_start_len,
             return_indexer_topk=self.return_indexer_topk,
+            indexer_topk_start_len=self.indexer_topk_start_len,
             modalities=self.modalities[i] if self.modalities else None,
             session_params=self.session_params,
             lora_path=self.lora_path[i] if self.lora_path is not None else None,
@@ -1326,6 +1330,9 @@ class TokenizedGenerateReqInput(BaseReq, kw_only=True):
     token_ids_logprob_rows: Optional[List[List[int]]] = None
     # Internal: the scheduler overwrites it on receipt; see Req.filler_seed.
     filler_seed: Optional[int] = None
+    # See GenerateReqInput.indexer_topk_start_len. A defaulted tail field: the
+    # Rust wire schema is positional and does not carry it.
+    indexer_topk_start_len: int = 0
 
     def wrap_pickle_fields(self):
         self.mm_inputs = wrap_object_fields_as_pickle(self.mm_inputs)

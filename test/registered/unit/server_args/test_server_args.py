@@ -1097,6 +1097,26 @@ class TestWatermarkServerArgs(CustomTestCase):
         self.assertEqual(sorted(runtime._ADAPTERS), sorted(WATERMARK_ALGORITHM_CHOICES))
 
 
+class TestIndexerTopkEncodingServerArgs(CustomTestCase):
+    def test_diff_encoding_requires_returning_indexer_topk(self):
+        for encoding in ("diff", "diff+zlib"):
+            with self.subTest(encoding=encoding):
+                with self.assertRaisesRegex(
+                    ValueError, "requires --enable-return-indexer-topk"
+                ):
+                    validation_hook.check_indexer_topk_encoding(
+                        ServerArgs(model_path="dummy", indexer_topk_encoding=encoding)
+                    )
+                validation_hook.check_indexer_topk_encoding(
+                    ServerArgs(
+                        model_path="dummy",
+                        indexer_topk_encoding=encoding,
+                        enable_return_indexer_topk=True,
+                    )
+                )
+        validation_hook.check_indexer_topk_encoding(ServerArgs(model_path="dummy"))
+
+
 class TestMmEncoderDataParallelLogging(CustomTestCase):
     def test_logs_when_encoder_dp_has_no_parallelism(self):
         server_args = ServerArgs(
@@ -5813,6 +5833,11 @@ class TestRustServerUnsupportedArgs(CustomTestCase):
         "delete_ckpt_after_loading": ["--delete-ckpt-after-loading"],
         "return_input_ids": ["--return-input-ids"],
         "return_output_ids": ["--return-output-ids"],
+        "indexer_topk_encoding": [
+            "--indexer-topk-encoding",
+            "diff",
+            "--enable-return-indexer-topk",
+        ],
     }
 
     @staticmethod

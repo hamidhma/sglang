@@ -55,6 +55,7 @@ PYTHON_ONLY_REQUEST_FIELDS = frozenset(
         "external_trace_header",
         "http_worker_ipc",
         "image_max_dynamic_patch",
+        "indexer_topk_start_len",
         "input_embeds",
         "log_metrics",
         "lora_id",

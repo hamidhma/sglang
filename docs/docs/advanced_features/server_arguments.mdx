@@ -3106,6 +3106,12 @@ Combining `--enable-response-store` with `--disaggregation-mode=prefill` or `dec
       <td style={{padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.05)"}}>bool flag (set to enable)</td>
     </tr>
     <tr>
+      <td style={{padding: "9px 12px", fontWeight: 500, backgroundColor: "rgba(255,255,255,0.02)"}}>`--indexer-topk-encoding`</td>
+      <td style={{padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.05)"}}>How responses carry the picks of `--enable-return-indexer-topk`, named by `meta_info["indexer_topk_format"]`. `raw`: base64 int32 rows (`indexer-int32-v1`). `diff`: base64 of an `indexer-diff-v1` blob that stores each row as the ids it adds and drops vs the previous row; `diff+zlib` also zlib-compresses the blob. Decode any format with `extract_indexer_topk_from_meta_info`.</td>
+      <td style={{padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.02)"}}>`raw`</td>
+      <td style={{padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.05)"}}><code>raw</code>, <code>diff</code>, <code>diff+zlib</code></td>
+    </tr>
+    <tr>
       <td style={{padding: "9px 12px", fontWeight: 500, backgroundColor: "rgba(255,255,255,0.02)"}}>`--disable-attn-tp-gather`</td>
       <td style={{padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.05)"}}>Disable scheduler-side attn_tp_gather (the upstream SP path that pads num_tokens to attn_tp_size and pre-allocates a gathered buffer). Use for models that manage SP scatter/gather at the model level (e.g., perform their own all_gather/reduce_scatter inside attention) and do not consume the upstream gathered_buffer. Without this, the cuda graph runner pads num_tokens to attn_tp_size, which can cause kernel autotuners to select wrong-sized variants at small batches.</td>
       <td style={{padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.02)"}}>`False`</td>

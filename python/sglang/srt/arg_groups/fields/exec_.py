@@ -25,6 +25,7 @@ from sglang.srt.arg_groups.choices import (
     FP4_GEMM_RUNNER_BACKEND_CHOICES,
     FP8_GEMM_RUNNER_BACKEND_CHOICES,
     GRAMMAR_BACKEND_CHOICES,
+    INDEXER_TOPK_ENCODING_CHOICES,
     LINEAR_ATTN_KERNEL_BACKEND_CHOICES,
     MOE_RUNNER_BACKEND_CHOICES,
     RL_ON_POLICY_TARGET_CHOICES,
@@ -212,6 +213,18 @@ class ExecFeatures(msgspec.Struct):
         bool,
         "Enable returning indexer topk indices of layers with indexer with responses.",
     ] = False
+    indexer_topk_encoding: A[
+        str,
+        Arg(
+            help="How responses carry the picks of --enable-return-indexer-topk, "
+            "named by meta_info['indexer_topk_format']. `raw`: base64 int32 rows "
+            "(indexer-int32-v1). `diff`: base64 of an indexer-diff-v1 blob that "
+            "stores each row as the ids it adds and drops vs the previous row; "
+            "`diff+zlib` also zlib-compresses the blob. Decode any format with "
+            "extract_indexer_topk_from_meta_info.",
+            choices=INDEXER_TOPK_ENCODING_CHOICES,
+        ),
+    ] = "raw"
     enable_encoder_swa_bounded_replay: A[
         bool,
         "DeepSeek-V4.1 encoder SWA bounded replay: cache Main KV and Indexer keys only, "

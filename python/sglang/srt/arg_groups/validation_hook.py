@@ -44,6 +44,15 @@ from sglang.srt.utils.runai_utils import is_runai_obj_uri
 logger = logging.getLogger(__name__)
 
 
+def check_indexer_topk_encoding(server_args: Any) -> None:
+    cfg = resolving_view(server_args)
+    if cfg.indexer_topk_encoding != "raw" and not cfg.enable_return_indexer_topk:
+        raise ValueError(
+            f"--indexer-topk-encoding {cfg.indexer_topk_encoding} requires "
+            "--enable-return-indexer-topk"
+        )
+
+
 def check_watermark_server_args(server_args: Any) -> None:
     cfg = resolving_view(server_args)
     if cfg.watermark_config is not None and not cfg.enable_watermark:
@@ -149,6 +158,8 @@ RUST_SERVER_UNSUPPORTED_ARGS = (
     # Chat responses would lack the server-default sglext token ids.
     "return_input_ids",
     "return_output_ids",
+    # The Rust server returns no indexer top-k picks.
+    "indexer_topk_encoding",
 )
 
 
@@ -596,6 +607,7 @@ def check_server_args(server_args: Any):
         )
 
     check_watermark_server_args(server_args)
+    check_indexer_topk_encoding(server_args)
 
     check_load_publish_args(server_args)
     warn_multi_node_kv_events(server_args)

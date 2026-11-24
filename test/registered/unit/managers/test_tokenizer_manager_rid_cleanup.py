@@ -24,6 +24,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import msgspec
 import numpy as np
+import torch
 from fastapi import HTTPException
 
 from sglang.test.ci.ci_register import register_cpu_ci
@@ -56,6 +57,13 @@ from sglang.srt.observability.request_logger import RequestLogger  # noqa: E402
 from sglang.srt.runtime_context import get_context
 from sglang.srt.sampling.sampling_mask import SamplingMaskChunk  # noqa: E402
 from sglang.srt.sampling.sampling_params import SamplingParams  # noqa: E402
+from sglang.srt.state_capturer.indexer_diff import (  # noqa: E402
+    indexer_topk_format,
+    sorted_rows,
+)
+from sglang.srt.state_capturer.indexer_topk import (  # noqa: E402
+    extract_indexer_topk_from_meta_info,
+)
 from sglang.srt.utils.weight_versions import WeightVersionSpan  # noqa: E402
 
 register_cpu_ci(est_time=11, suite="base-a-test-cpu")
@@ -721,6 +729,35 @@ class TestRidToStateCleanupOnBatchOutput(CustomTestCase):
         asyncio.run(tm._handle_batch_output(batch_output))
 
         self.assertIn(rid, tm.rid_to_state)
+
+
+class TestIndexerTopkMetaInfo(CustomTestCase):
+    def _meta_info(self, indexer_topk):
+        tm = _make_tokenizer_manager(self)
+        tm.indexer_topk_encoding = "diff"
+        tm.indexer_topk_format = indexer_topk_format("diff")
+        tm.rid_to_state["r"] = state = _make_req_state("r")
+        batch_output = msgspec.structs.replace(
+            _make_batch_str_output("r"), indexer_topk=[indexer_topk]
+        )
+        asyncio.run(tm._handle_batch_output(batch_output))
+        return state.out_list[-1]["meta_info"]
+
+    def test_skip_tokenizer_init_tensor_is_encoded_with_its_format(self):
+        """A tensor (BatchTokenIDOutput skipped the detokenizer) goes through the
+        server encoding, and the response names that encoding."""
+        rows = torch.tensor([[[4, 2]], [[2, 9]]], dtype=torch.int32)
+        meta_info = self._meta_info(rows)
+        self.assertEqual(meta_info["indexer_topk_format"], "indexer-diff-v1")
+        np.testing.assert_array_equal(
+            extract_indexer_topk_from_meta_info({"meta_info": meta_info}),
+            sorted_rows(rows.numpy()),
+        )
+
+    def test_no_picks_means_no_format(self):
+        meta_info = self._meta_info(None)
+        self.assertNotIn("indexer_topk", meta_info)
+        self.assertNotIn("indexer_topk_format", meta_info)
 
 
 class TestStoredRequestStats(CustomTestCase):

@@ -338,6 +338,45 @@ def truncate_input_ids(
     return truncated
 
 
+def _validate_start_len(
+    *, name: str, start_len: int, num_input_tokens: int
+) -> Optional[str]:
+    if start_len < 0:
+        return f"{name}={start_len} is lower than 0. Please use a non-negative {name}."
+    if start_len > num_input_tokens:
+        return (
+            f"{name}={start_len} is higher than the number of input tokens "
+            f"{num_input_tokens}. Please use a smaller {name}."
+        )
+    return None
+
+
+def validate_capture_start_lens(
+    *, recv_req: io_struct.TokenizedGenerateReqInput, num_input_tokens: int
+) -> Optional[str]:
+    """Error message if a requested capture's start_len is outside [0, prompt_tokens]."""
+    checks = (
+        (
+            "routed_experts_start_len",
+            recv_req.return_routed_experts,
+            recv_req.routed_experts_start_len,
+        ),
+        (
+            "indexer_topk_start_len",
+            recv_req.return_indexer_topk,
+            recv_req.indexer_topk_start_len,
+        ),
+    )
+    for name, requested, start_len in checks:
+        if requested and (
+            error_msg := _validate_start_len(
+                name=name, start_len=start_len, num_input_tokens=num_input_tokens
+            )
+        ):
+            return error_msg
+    return None
+
+
 def validate_input_length(
     req: Req,
     max_req_input_len: int,

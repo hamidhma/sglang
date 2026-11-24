@@ -2,6 +2,9 @@ import unittest
 from array import array
 from unittest import mock
 
+import numpy as np
+import torch
+
 from sglang.test.ci.ci_register import register_cpu_ci
 from sglang.test.test_utils import CustomTestCase, maybe_stub_sgl_kernel
 
@@ -21,6 +24,8 @@ from sglang.srt.managers.io_struct import (
     flatten_output_ids,
 )
 from sglang.srt.runtime_context import get_context
+from sglang.srt.state_capturer.indexer_diff import indexer_topk_format, sorted_rows
+from sglang.srt.state_capturer.indexer_topk import extract_indexer_topk_from_meta_info
 
 register_cpu_ci(est_time=5, suite="base-a-test-cpu")
 
@@ -318,6 +323,48 @@ class TestDetokenizeState(CustomTestCase):
                 self.assertEqual(out.output_strs, ["7."])
                 out = detok.handle_batch_token_id_out(beam)
             self.assertEqual(out.output_strs, ["8."])
+
+
+class TestIndexerTopkEncoding(CustomTestCase):
+    def setUp(self) -> None:
+        self.enterContext(get_context().override_server_args(kv_canary="none"))
+
+    def _encode(self, encoding, indexer_topk):
+        detok = _detokenizer()
+        detok.indexer_topk_encoding = encoding
+        rows = [
+            (rid, [3], _header([1]), True)
+            for rid in ("a", "b", "c")[: len(indexer_topk)]
+        ]
+        recv_obj = _output({}, rows)
+        recv_obj.indexer_topk = indexer_topk
+        return detok.handle_batch_token_id_out(recv_obj).indexer_topk
+
+    def test_raw_encoding_keeps_the_pre_diff_bytes(self):
+        indexer_topk = [torch.randint(-1, 900, (6, 2, 4), dtype=torch.int32), None]
+        self.assertEqual(
+            self._encode("raw", indexer_topk),
+            DetokenizerManager._b64_encode_per_request(indexer_topk),
+        )
+
+    def test_diff_encoding_decodes_per_request(self):
+        """Each request is encoded on its own: a request without picks stays
+        None, and one with ids above uint16 still decodes next to a narrow one."""
+        narrow = torch.tensor([[[5, 1]], [[1, 7]], [[7, 2]]], dtype=torch.int32)
+        wide = torch.tensor([[[70000, 1]], [[1, 70001]]], dtype=torch.int32)
+        for encoding in ("diff", "diff+zlib"):
+            with self.subTest(encoding=encoding):
+                out = self._encode(encoding, [narrow, None, wide])
+                self.assertIsNone(out[1])
+                for b64, rows in ((out[0], narrow), (out[2], wide)):
+                    meta_info = {
+                        "indexer_topk": b64,
+                        "indexer_topk_format": indexer_topk_format(encoding),
+                    }
+                    np.testing.assert_array_equal(
+                        extract_indexer_topk_from_meta_info({"meta_info": meta_info}),
+                        sorted_rows(rows.numpy()),
+                    )
 
 
 if __name__ == "__main__":

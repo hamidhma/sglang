@@ -2,7 +2,6 @@ import logging
 from typing import Optional
 
 import numpy as np
-import pybase64
 import torch
 
 from sglang.srt.configs.model_config import ModelConfig, get_num_indexer_layers
@@ -13,6 +12,7 @@ from sglang.srt.runtime_context import (
     get_schedule,
 )
 from sglang.srt.state_capturer.base import BaseTopkCapturer
+from sglang.srt.state_capturer.indexer_diff import decode_indexer_topk_b64
 
 logger = logging.getLogger(__name__)
 
@@ -77,15 +77,18 @@ def maybe_capture_indexer_topk(
     return topk_indices
 
 
-def extract_indexer_topk_from_meta_info(data):
-    # Mirrors extract_routed_experts_from_meta_info: indices are returned as
-    # base64-encoded int32 bytes. Caller reshapes to (seqlen-1, num_indexer_layers,
-    # index_topk).
-    indexer_topk_base64 = data["meta_info"].get("indexer_topk", None)
-    indexer_topk = np.frombuffer(
-        pybase64.b64decode(indexer_topk_base64.encode("utf-8")), dtype=np.int32
+def extract_indexer_topk_from_meta_info(data) -> np.ndarray:
+    """Decode ``meta_info["indexer_topk"]`` per ``meta_info["indexer_topk_format"]``.
+
+    indexer-int32-v1 (also when the format field is absent, as from older
+    servers): flat int32 ids in capture order; the caller reshapes to
+    (seqlen-1, num_indexer_layers, index_topk). The indexer-diff-v1 formats:
+    that shape already, with each row's ids sorted ascending and -1 padded.
+    """
+    meta_info = data["meta_info"]
+    return decode_indexer_topk_b64(
+        data=meta_info["indexer_topk"], format=meta_info.get("indexer_topk_format")
     )
-    return indexer_topk
 
 
 def create_indexer_capturer(

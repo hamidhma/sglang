@@ -24,6 +24,7 @@ from sglang.srt.managers.scheduler_components.request_list import (
 from sglang.srt.managers.utils import GenerationBatchResult
 from sglang.srt.model_executor.forward_mode import CaptureHiddenMode
 from sglang.srt.runtime_context import get_context
+from sglang.srt.state_capturer.base import BaseTopkCapturer
 from sglang.test.ci.ci_register import register_cpu_ci
 from sglang.test.scheduler_test_utils import FakeReq, release_only_retirer
 from sglang.test.test_utils import CustomTestCase
@@ -725,6 +726,48 @@ class TestDecodeHiddenStateRetention(CustomTestCase):
 
         self.assertEqual(req.hidden_states, [second_step[1].tolist()])
         self.assertEqual(len(req.hidden_states), 1)
+
+
+class TestCollectIndexerTopk(CustomTestCase):
+    def _collect(self, *, return_indexer_topk, start_len):
+        num_slots, num_layers, topk = 16, 2, 3
+        capturer = BaseTopkCapturer.__new__(BaseTopkCapturer)
+        capturer.host_cache = SimpleNamespace(
+            buffer=torch.arange(num_slots * num_layers * topk, dtype=torch.int32).view(
+                num_slots, num_layers, topk
+            )
+        )
+        slots = torch.tensor([[9, 3, 12, 0, 7, 5, 14, 1]])
+        processor = replace(
+            _make_processor(self),
+            req_to_token_pool=SimpleNamespace(req_to_token=slots),
+        )
+        req = SimpleNamespace(
+            return_indexer_topk=return_indexer_topk,
+            indexer_topk_start_len=start_len,
+            origin_input_ids=[1, 2, 3, 4, 5],
+            output_ids_through_stop=[6, 7],
+            kv=SimpleNamespace(req_pool_idx=0),
+            indexer_topk=None,
+        )
+        with patch(
+            "sglang.srt.managers.scheduler_components.batch_result_processor."
+            "get_global_indexer_capturer",
+            return_value=capturer,
+        ):
+            processor._maybe_collect_indexer_topk(req)
+        return req.indexer_topk, capturer.host_cache.buffer[slots[0]]
+
+    def test_rows_start_at_indexer_topk_start_len(self):
+        rows, by_position = self._collect(return_indexer_topk=True, start_len=2)
+        # seqlen 7: positions [2, 6) of the request.
+        torch.testing.assert_close(rows, by_position[2:6])
+
+    def test_unrequested_picks_are_not_collected(self):
+        """A request without return_indexer_topk skips intake validation, so its
+        start_len may be negative; collection must not reach get_topk."""
+        rows, _ = self._collect(return_indexer_topk=False, start_len=-4)
+        self.assertIsNone(rows)
 
 
 if __name__ == "__main__":

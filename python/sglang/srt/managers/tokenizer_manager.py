@@ -215,6 +215,10 @@ from sglang.srt.server_args import (
 from sglang.srt.speculative.spec_decoding_metrics import (
     populate_spec_info,
 )
+from sglang.srt.state_capturer.indexer_diff import (
+    encode_indexer_topk_for_response,
+    indexer_topk_format,
+)
 from sglang.srt.utils import (
     configure_gc_logging,
     freeze_gc,
@@ -694,6 +698,8 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
         self.skip_tokenizer_init = get_serving().skip_tokenizer_init
         self.preferred_sampling_params = get_serving().preferred_sampling_params
         self.crash_dump_folder = get_observability().crash_dump_folder
+        self.indexer_topk_encoding = get_exec().features.indexer_topk_encoding
+        self.indexer_topk_format = indexer_topk_format(self.indexer_topk_encoding)
 
         # Init model config
         self.init_model_config()
@@ -1907,6 +1913,7 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
                 return_routed_experts=obj.return_routed_experts,
                 routed_experts_start_len=obj.routed_experts_start_len,
                 return_indexer_topk=obj.return_indexer_topk,
+                indexer_topk_start_len=obj.indexer_topk_start_len,
                 routed_dp_rank=obj.routed_dp_rank,
                 disagg_prefill_dp_rank=obj.disagg_prefill_dp_rank,
                 priority=obj.priority,
@@ -3068,10 +3075,16 @@ class TokenizerManager(TokenizerControlMixin, TokenizerManagerScoreMixin):
                     meta_info["routed_experts"] = val
             if getattr(recv_obj, "indexer_topk", None):
                 val = recv_obj.indexer_topk[i]
+                # BatchTokenIDOutput (skip_tokenizer_init) bypasses the detokenizer.
+                if isinstance(val, torch.Tensor):
+                    val = encode_indexer_topk_for_response(
+                        rows=val.numpy(),
+                        encoding=self.indexer_topk_encoding,
+                        rid=recv_obj.rids[i],
+                    )
                 if val is not None:
-                    if isinstance(val, torch.Tensor):
-                        val = pybase64.b64encode(val.numpy().tobytes()).decode("utf-8")
                     meta_info["indexer_topk"] = val
+                    meta_info["indexer_topk_format"] = self.indexer_topk_format
             if getattr(recv_obj, "dp_ranks", None):
                 meta_info["dp_rank"] = recv_obj.dp_ranks[i]
 

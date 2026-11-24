@@ -257,6 +257,8 @@ class SchedulerBatchResultProcessor:
             )
 
     def _maybe_collect_indexer_topk(self, req: Req):
+        if not req.return_indexer_topk:
+            return
         capturer = get_global_indexer_capturer()
         if capturer is None:
             return
@@ -265,6 +267,7 @@ class SchedulerBatchResultProcessor:
             req_pool_idx=req.kv.req_pool_idx,
             seqlen=seqlen,
             req_to_token_pool=self.req_to_token_pool,
+            start_len=req.indexer_topk_start_len,
         )
 
     def _maybe_collect_customized_info(

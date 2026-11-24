@@ -471,6 +471,7 @@ class Req(ReqDllmMixin):
         return_routed_experts: bool = False,
         routed_experts_start_len: int = 0,
         return_indexer_topk: bool = False,
+        indexer_topk_start_len: int = 0,
         eos_token_ids: Optional[Set[int]] = None,
         bootstrap_host: Optional[str] = None,
         bootstrap_port: Optional[int] = None,
@@ -757,6 +758,7 @@ class Req(ReqDllmMixin):
         )
 
         self.return_indexer_topk = return_indexer_topk
+        self.indexer_topk_start_len = indexer_topk_start_len
         self.indexer_topk: Optional[torch.Tensor] = (
             None  # cpu tensor: shape (seqlen, num_indexer_layers, index_topk)
         )
@@ -1715,6 +1717,7 @@ class Req(ReqDllmMixin):
         self.return_logprob = False
         self.logprob_start_len = -1
         self.routed_experts_start_len = 0
+        self.indexer_topk_start_len = 0
         self.request_finish(FINISH_ABORT(error_msg, status_code, err_type))
 
     def update_reasoning_tokens(self, token_id, think_end_ids):
